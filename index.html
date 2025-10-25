@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Evolve Snake 2D</title>
+    <!-- Tailwind CSS Yüklemesi -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        'snake-green': '#38a169',
+                        'snake-dark': '#1a202c',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Ana Kontrol: Canvas ve Çevresi */
+        body {
+            background-color: #171923; /* Koyu arka plan */
+            color: #e2e8f0;
+            font-family: 'Inter', sans-serif;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start; /* Dikeyde başlangıca hizala */
+            padding: 20px;
+        }
+
+        /* Oyun Konteyneri Stil Ayarları */
+        #game-container {
+            position: relative;
+            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.5);
+            border-radius: 12px;
+            overflow: hidden;
+            /* Inline style'ı burada geçersiz kılmak için */
+            width: 400px; 
+            height: 400px;
+        }
+        
+        /* Canvas Stili */
+        #snakeCanvas {
+            border: 4px solid #4a5568;
+            border-radius: 8px;
+            background-color: #f7fafc; 
+        }
+
+        /* Menü ve Pause Ekranı Stili */
+        #game-menu, #pause-screen, #messageBox {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: rgba(26, 32, 44, 0.95); /* Koyu Yarı Saydamlık */
+            z-index: 10; 
+            backdrop-filter: blur(5px);
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        #game-menu {
+            /* Başlangıçta görünür olmalı */
+            display: flex;
+        }
+        
+        #pause-screen, #messageBox {
+            /* Başlangıçta gizli olmalı */
+            display: none; 
+        }
+
+        /* Dash Bar Stili */
+        #dash-bar {
+            background-color: #4a5568; 
+            height: 8px;
+            border-radius: 4px;
+            overflow: hidden;
+            width: 100px;
+            margin-top: 4px;
+        }
+        
+        #dash-fill {
+            background-color: #f6ad55;
+            height: 100%;
+            width: 100%;
+            transition: width 0.1s linear;
+        }
+
+        /* Buton Stilleri */
+        .btn-primary {
+            transition: transform 0.1s, box-shadow 0.1s;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+        }
+        .btn-primary:active {
+            transform: translateY(0);
+            box-shadow: none;
+        }
+        
+        /* Genel Konteyner: Oyun + Liderlik Tablosu için Flex */
+        #main-layout {
+            display: flex;
+            gap: 20px;
+            align-items: flex-start; /* Üstten hizala */
+            max-width: 900px;
+            width: 100%;
+        }
+
+        /* Liderlik Tablosu Stili */
+        #leaderboard {
+            flex-grow: 1;
+            min-width: 250px;
+            background-color: #1a202c;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.5);
+        }
+        
+        /* Mobil Buton Stilleri */
+        .control-button {
+            width: 50px;
+            height: 50px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #2d3748; /* Koyu gri */
+            color: #fff;
+            font-size: 20px;
+            font-weight: bold;
+            border-radius: 8px;
+            box-shadow: 0 4px #1a202c;
+            transition: all 0.1s;
+            user-select: none; /* Metin seçimini engelle */
+            touch-action: manipulation; /* Gecikmeyi azalt */
+        }
+        .control-button:active {
+            box-shadow: 0 0 #1a202c;
+            transform: translateY(4px);
+        }
+
+        /* --- MOBİL UYUMLULUK BAŞLANGIÇ --- */
+        @media (max-width: 768px) {
+            /* Body Padding'i azalt */
+            body {
+                padding: 10px 5px; 
+            }
+            
+            #main-layout {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            /* Liderlik tablosu genişliğini artır */
+            #leaderboard {
+                width: 95%;
+                margin-top: 20px;
+            }
+            
+            /* Oyun Çevresi Konteyneri (Mobil ekran genişliğine sığdır) */
+            .max-w-md.w-full {
+                width: 95%;
+                padding: 10px;
+            }
+
+            /* Canvas ve Oyun Konteyneri: Ekran genişliğine göre dinamik boyut */
+            #game-container {
+                /* Inline width/height 400px değerlerini geçersiz kılmak için */
+                width: 98% !important; 
+                /* 16:9'a benzer bir oran için 98vw de kullanılabilir, ancak w-full ile devam edelim */
+                max-width: 400px;
+                height: auto; 
+                /* Square canvas'ı korumak için JS tarafında dinamik boyutlandırma yapılabilir. */
+            }
+            #snakeCanvas {
+                width: 100%;
+                height: 100%;
+            }
+            
+            /* Mobil Kontrol Alanı: Göster ve Konumlandır */
+            #mobile-controls {
+                display: flex !important; /* Mobilde göster */
+                padding: 10px;
+                /* İsteğe bağlı: Butonları ekranın altına sabitle */
+                /* position: sticky; 
+                bottom: 0;
+                background-color: #1a202c;
+                z-index: 50; */
+            }
+
+            /* D-Pad Boyutunu Küçük Ekranlarda Azalt (Çok küçük telefonlar için) */
+            #dpad {
+                 width: 120px;
+                 height: 120px;
+            }
+            .control-button {
+                width: 40px;
+                height: 40px;
+                font-size: 18px;
+            }
+            #btn-dash {
+                 width: 60px;
+                 height: 60px;
+            }
+            
+            /* D-Pad'deki ikonların pozisyonlarını düzelt */
+             #btn-up { top: 0; }
+             #btn-left { left: 0; }
+             #btn-right { right: 0; }
+             #btn-down { bottom: 0; }
+        }
+
+        /* Masaüstünde mobil kontrol panelini gizle */
+        @media (min-width: 769px) {
+            #mobile-controls {
+                display: none;
+            }
+        }
+        /* --- MOBİL UYUMLULUK SONU --- */
+    </style>
+</head>
+<body>
+
+    <div id="main-layout">
+        <!-- SOL KISIM: OYUN KONTROL VE KANVASI -->
+        <div class="max-w-md w-full p-4 md:p-8 bg-snake-dark rounded-xl shadow-2xl">
+            <h1 class="text-3xl font-bold mb-6 text-center text-snake-green">Evolve Snake 2D</h1>
+
+            <!-- Oyun Kontayneri -->
+            <div id="game-container" class="mx-auto">
+                <canvas id="snakeCanvas"></canvas>
+
+                <!-- 1. BAŞLANGIÇ MENÜSÜ -->
+                <div id="game-menu" class="p-8">
+                    <h2 class="text-2xl font-semibold mb-6 text-white">Yapay Zeka Destekli Akıcı Deneyim</h2>
+
+                    <div class="w-full max-w-xs">
+                        <label for="playerNameInput" class="block text-sm font-medium mb-1 text-gray-400">Oyuncu Adınız:</label>
+                        <input type="text" id="playerNameInput" value="Oyuncu" placeholder="Oyuncu"
+                            class="w-full px-4 py-2 mb-4 bg-gray-700 text-white rounded-lg border border-gray-600 focus:ring-snake-green focus:border-snake-green">
+                        
+                        <label for="gameModeSelect" class="block text-sm font-medium mb-1 text-gray-400">Oyun Modu:</label>
+                        <select id="gameModeSelect"
+                                class="w-full px-4 py-2 mb-6 bg-gray-700 text-white rounded-lg border border-gray-600 focus:ring-snake-green focus:border-snake-green appearance-none cursor-pointer">
+                            <option value="CLASSIC">Klasik (Duvardan Geçiş)</option>
+                            <option value="HARDCORE">Zorlu (Duvarlara Çarpma)</option>
+                        </select>
+
+                        <button id="startButton"
+                                class="btn-primary w-full px-4 py-3 bg-snake-green text-white font-bold rounded-lg hover:bg-green-700">
+                            OYUNA BAŞLA
+                        </button>
+
+                        <div class="mt-8 p-3 bg-gray-700 rounded-lg text-xs text-gray-300">
+                            <h4 class="font-bold mb-1 text-gray-200">Kontroller:</h4>
+                            <p class="text-xs">Hareket: Ok Tuşları, W/A/S/D</p>
+                            <p class="text-xs">Hızlanma (Dash): <span class="font-bold text-yellow-400">BOŞLUK</span></p>
+                            <p class="text-xs">Duraklat/Devam Et: <span class="font-bold text-yellow-400">P</span></p>
+                            <p class="text-xs font-bold mt-1 text-yellow-400">Mobil: Ekrandaki Tuşları Kullanın!</p>
+                        </div>
+                        
+                        <!-- Kullanıcı ID Bilgisi -->
+                        <div class="mt-4 text-xs text-gray-500 truncate">
+                            Kullanıcı ID: <span id="userIdDisplay" class="font-mono text-gray-400">Yükleniyor...</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 2. DURAKLATMA EKRANI (Başlangıçta gizli) -->
+                <div id="pause-screen" class="hidden p-8">
+                    <h2 class="text-4xl font-extrabold text-yellow-400 mb-6 tracking-widest">
+                        OYUN DURAKLATILDI (P)
+                    </h2>
+                    <p class="text-xl text-gray-300">Devam etmek için tekrar 'P' tuşuna basın.</p>
+                </div>
+                
+                <!-- 3. GAME OVER EKRANI (Başlangıçta gizli) -->
+                <div id="messageBox" class="hidden p-8">
+                    <h2 id="messageTitle" class="text-4xl font-extrabold text-red-500 mb-4">Oyun Bitti! 🐍💥</h2>
+                    <p id="messageText" class="text-xl text-gray-300 mb-6"></p>
+
+                    <!-- Yapay Zeka Koçu Yorum Alanı -->
+                    <div class="mt-4 p-4 bg-gray-700 rounded-lg shadow-inner">
+                        <h3 class="text-lg font-semibold mb-2 text-snake-green">Yapay Zeka Koçu</h3>
+                        <p id="aiCommentary" class="text-sm italic text-gray-300 min-h-[30px]">
+                            Kaybınız hakkında yorum almak için butona tıklayın.
+                        </p>
+                        <button id="geminiButton" 
+                                class="btn-primary mt-4 px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                                disabled>
+                            Koç Yorumu Al
+                        </button>
+                    </div>
+
+                    <!-- ID DEĞİŞTİRİLDİ: restartButtonGameOver -->
+                    <button id="restartButtonGameOver"
+                            class="btn-primary mt-8 px-6 py-3 bg-snake-green text-white font-bold rounded-lg hover:bg-green-700">
+                        YENİ OYUN BAŞLAT
+                    </button>
+                </div>
+
+            </div>
+            <!-- Oyun Kontayneri Sonu -->
+
+            <!-- Oyun Bilgi ve Durum Alanı -->
+            <div id="game-info" class="mt-4 flex justify-between items-center text-sm font-medium p-3 bg-gray-800 rounded-lg shadow-md hidden">
+                <!-- Sol: Yeniden Başlat Butonu -->
+                <div>
+                    <!-- OYUN SIRASINDA GÖRÜNÜR YENİDEN BAŞLAT BUTONU -->
+                    <button id="restartButtonInGame"
+                            class="btn-primary px-3 py-1 text-xs bg-red-600 text-white font-semibold rounded-full hover:bg-red-700">
+                        YENİDEN BAŞLAT
+                    </button>
+                    <!-- Mobil Pause Butonu -->
+                    <button id="mobilePauseButton"
+                            class="btn-primary px-3 py-1 text-xs bg-indigo-600 text-white font-semibold rounded-full hover:bg-indigo-700 ml-2">
+                        DURAKLAT
+                    </button>
+                </div>
+
+                <!-- Orta: Skorlar -->
+                <div class="flex items-center space-x-4">
+                    <span id="score" class="font-bold text-lg text-snake-green">Puan: 0</span>
+                    <span id="high-score" class="font-bold text-lg text-yellow-400">En Yüksek: 0</span>
+                </div>
+                
+                <!-- Sağ: Zamanlayıcı ve Dash Bar -->
+                <div class="text-sm text-gray-300 text-right">
+                    <div id="foodTimerDisplay" class="font-bold text-blue-400 h-5">Yem Süresi: 5.0s</div> 
+                    <div id="active-powerup" class="font-bold text-red-400 h-5"></div>
+                    <div id="dash-bar" class="w-20 mx-auto">
+                        <div id="dash-fill" style="width: 100%;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MOBİL KONTROL PANELİ (SADECE MOBİLDE GÖRÜNÜR) -->
+            <div id="mobile-controls" class="mt-6 flex justify-between items-center hidden w-full">
+                
+                <!-- Sol: D-Pad -->
+                <div id="dpad" class="relative w-[150px] h-[150px] mr-4">
+                    <!-- Yukarı -->
+                    <button id="btn-up" class="control-button absolute top-0 left-1/2 -translate-x-1/2">↑</button>
+                    <!-- Sol -->
+                    <button id="btn-left" class="control-button absolute top-1/2 left-0 -translate-y-1/2">←</button>
+                    <!-- Orta Boş Alan (Opsiyonel) -->
+                    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[50px] h-[50px] bg-gray-600 rounded-lg"></div>
+                    <!-- Sağ -->
+                    <button id="btn-right" class="control-button absolute top-1/2 right-0 -translate-y-1/2">→</button>
+                    <!-- Aşağı -->
+                    <button id="btn-down" class="control-button absolute bottom-0 left-1/2 -translate-x-1/2">↓</button>
+                </div>
+                
+                <!-- Sağ: Dash Butonu -->
+                <div class="flex items-center justify-center h-[150px]">
+                    <button id="btn-dash" class="control-button w-[70px] h-[70px] text-yellow-400 bg-red-700 hover:bg-red-600 text-lg">
+                        DASH
+                    </button>
+                </div>
+            </div>
+
+        </div>
+        <!-- SOL KISIM SONU -->
+
+        <!-- SAĞ KISIM: LİDERLİK TABLOSU -->
+        <div id="leaderboard" class="w-full">
+            <h2 class="text-2xl font-bold mb-4 text-center text-yellow-400 border-b pb-2 border-gray-700">🏆 Liderlik Tablosu</h2>
+            <div id="leaderboard-list" class="space-y-2">
+                <!-- Skorlar buraya JS ile yüklenecek -->
+                <p class="text-gray-400 text-center" id="leaderboard-loading">Liderlik skorları yükleniyor...</p>
+            </div>
+        </div>
+        <!-- SAĞ KISIM SONU -->
+
+    </div>
+
+    <!-- Script Yüklemesi -->
+    <script type="module" src="script.js"></script>
+    
+    <!-- FIREBASE İMPORTLARI VE BAŞLATMA LOGİĞİ (GitHub Pages için Uyarlandı) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, query, limit, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // Firestore için hata ayıklama seviyesini ayarla
+        setLogLevel('Debug');
+        
+        // --- GÜVENLİK UYARISI: BU ALANA KENDİ FIREBASE AYARLARINIZI YAPIŞTIRIN! ---
+        // Bu anahtarlar genel anahtarlardır, ancak Firestore Kurallarınızın SIKI olduğundan emin olun.
+        const myFirebaseConfig = {
+            apiKey: "SİZİN_API_KEY_BURAYA", 
+            authDomain: "SİZİN_PROJE_ADI.firebaseapp.com",
+            projectId: "SİZİN_PROJE_ADI",
+            // Diğer alanlar (storageBucket, messagingSenderId, vb.) zorunlu değildir.
+        };
+        const firebaseConfig = myFirebaseConfig;
+        
+        // Proje ID'sini App ID olarak kullanıyoruz.
+        const appId = firebaseConfig.projectId; 
+
+        let app, db, auth;
+        let userId = null;
+
+        try {
+            // 1. Firebase'i Başlat
+            if (appId && Object.keys(firebaseConfig).length > 0) {
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+            } else {
+                console.error("Firebase yapılandırması eksik veya yanlış.");
+                return;
+            }
+
+            // Global olarak erişilebilir hale getir
+            window.firebaseApp = app;
+            window.firebaseDb = db;
+            window.firebaseAuth = auth;
+
+            // 2. Kimlik Doğrulama: Anonim Oturum Açma
+            signInAnonymously(auth).then((userCredential) => {
+                userId = userCredential.user.uid;
+                document.getElementById('userIdDisplay').textContent = userId;
+                window.currentUserId = userId; // Global olarak erişilebilir yap
+                loadLeaderboard(db, appId);
+            }).catch(e => {
+                console.error("Anonim oturum açma hatası:", e);
+                // Hata durumunda rastgele ID kullan (Liderlik tablosuna kayıt yapamaz)
+                userId = `Anonim_${crypto.randomUUID().substring(0, 8)}`; 
+                document.getElementById('userIdDisplay').textContent = userId;
+                window.currentUserId = userId;
+                // Yine de liderlik tablosunu yüklemeyi dene (sadece okuma)
+                loadLeaderboard(db, appId); 
+            });
+
+        } catch (error) {
+            console.error("Firebase başlatma hatası:", error);
+        }
+
+        // Liderlik Tablosu Yükleme Fonksiyonu
+        function loadLeaderboard(db, appId) {
+            const leaderboardList = document.getElementById('leaderboard-list');
+            
+            // Tüm kullanıcıların görebileceği public koleksiyon yolu (GitHub pages'ta App ID'si projenin ID'sidir)
+            const collectionPath = `/artifacts/${appId}/public/data/snake_leaderboard`; 
+            
+            // Skora göre azalan sırada ilk 10 kaydı sorgula
+            const q = query(
+                collection(db, collectionPath),
+                limit(10)
+            );
+
+            // Gerçek zamanlı dinleyici
+            onSnapshot(q, (snapshot) => {
+                let scores = [];
+                snapshot.forEach((doc) => {
+                    scores.push(doc.data());
+                });
+
+                // JavaScript'te sıralama yap
+                scores.sort((a, b) => b.score - a.score); 
+
+                leaderboardList.innerHTML = ''; // Eski listeyi temizle
+
+                if (scores.length === 0) {
+                    leaderboardList.innerHTML = '<p class="text-gray-400 text-center">Henüz skor yok. İlk sen oyna!</p>';
+                    return;
+                }
+
+                scores.forEach((data, index) => {
+                    const rank = index + 1;
+                    // userId'nin string olarak ayarlandığından emin ol
+                    const currentUserId = window.currentUserId || ''; 
+                    const isCurrentUser = data.userId === currentUserId;
+                    
+                    const scoreElement = `
+                        <div class="flex justify-between items-center p-3 rounded-lg ${isCurrentUser ? 'bg-yellow-800 border-2 border-yellow-400' : 'bg-gray-700'}">
+                            <div class="flex items-center space-x-3">
+                                <span class="text-lg font-extrabold ${rank <= 3 ? 'text-yellow-400' : 'text-gray-400'} w-6 text-right">${rank}.</span>
+                                <span class="font-semibold ${isCurrentUser ? 'text-white' : 'text-gray-200'}">${data.playerName || 'Bilinmeyen'}</span>
+                            </div>
+                            <span class="text-xl font-bold text-snake-green">${data.score}</span>
+                        </div>
+                    `;
+                    leaderboardList.innerHTML += scoreElement;
+                });
+            }, (error) => {
+                console.error("Liderlik tablosu yüklenirken hata:", error);
+                leaderboardList.innerHTML = '<p class="text-red-400 text-center">Skorlar yüklenemedi. (Kuralları kontrol edin)</p>';
+            });
+        }
+    </script>
+    
+</body>
+</html>
